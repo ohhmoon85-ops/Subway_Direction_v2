@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+.vercel/
+.env
+.env.local
+.env*.local
+.data/
+*.tsbuildinfo
+next-env.d.ts
+answer-table.csv
+
+# 기획서(특허 출원 전 비공개 문서)는 저장소에 올리지 않음
+*기획서*.md
+plan.md
