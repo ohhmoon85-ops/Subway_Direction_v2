@@ -37,8 +37,14 @@ describe('오프라인 계산', () => {
   });
 
   it('검색', () => {
-    expect(offlineSearch('강남', 'ko')[0].stationId).toBe('gangnam');
-    expect(offlineSearch('Haeundae', 'en', '부산권').some((c) => c.id === 'haeundae-beach')).toBe(true);
-    expect(offlineSearch('명동', 'ko', undefined, true).every((c) => c.kind === 'station')).toBe(true);
+    expect(offlineSearch('강남', 'ko').results[0].stationId).toBe('gangnam');
+    expect(offlineSearch('Haeundae', 'en', '부산권').results.some((c) => c.id === 'haeundae-beach')).toBe(true);
+    expect(offlineSearch('명동', 'ko', undefined, true).results.every((c) => c.kind === 'station')).toBe(true);
+  });
+
+  it('오프라인에서도 목적지는 출발 권역만', () => {
+    const r = offlineSearch('해운대', 'ko', '수도권');
+    expect(r.results).toEqual([]);
+    expect(r.elsewhere).toEqual(['부산']);
   });
 });

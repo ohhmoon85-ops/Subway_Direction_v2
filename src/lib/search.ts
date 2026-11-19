@@ -141,6 +141,16 @@ function score(q: string, key: string): number {
   return 0;
 }
 
+/**
+ * 목적지 후보를 출발역 권역으로 나눈다. 도시철도는 도시끼리 이어지지 않으므로 같은 권역만 보여 주고,
+ * 다른 권역에서만 맞는 이름이면 그 권역 이름을 알려 준다 ("부산의 역이에요").
+ */
+export function splitByRegion(results: Candidate[], region: string, lang: Lang, limit = 8): { results: Candidate[]; elsewhere: string[] } {
+  const inRegion = results.filter((c) => c.region === region).slice(0, limit);
+  const others = inRegion.length > 0 ? [] : [...new Set(results.filter((c) => c.region !== region && c.score >= 55).map((c) => c.region))];
+  return { results: inRegion, elsewhere: others.map((r) => REGION_NAMES[r as Region]?.[lang] ?? r) };
+}
+
 /** 다른 권역의 역이면 "부산 · Seomyeon"처럼 권역을 앞에 붙인다 */
 function regionTag(region: string, lang: Lang, preferRegion?: string): string {
   if (region === (preferRegion ?? '수도권')) return '';

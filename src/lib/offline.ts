@@ -10,7 +10,7 @@
  */
 import { buildGuide, type GuideView } from './guide-view';
 import { differentRegion } from './route';
-import { getPlaces, placeLabel, search, type Candidate } from './search';
+import { getPlaces, placeLabel, search, splitByRegion, type Candidate } from './search';
 import { getStation, normalizeStationId } from './network';
 import type { Lang, Sign, SignMapping } from './types';
 
@@ -53,7 +53,8 @@ export function offlineGuide(
   return view ? { ok: true, view } : { ok: false, error: 'no_route' };
 }
 
-export function offlineSearch(q: string, lang: Lang, region?: string, onlyStation = false): Candidate[] {
-  const r = search(q.slice(0, 80), lang, [], onlyStation ? 20 : 8, region);
-  return onlyStation ? r.filter((c) => c.kind === 'station').slice(0, 8) : r;
+export function offlineSearch(q: string, lang: Lang, region?: string, onlyStation = false): { results: Candidate[]; elsewhere: string[] } {
+  const r = search(q.slice(0, 80), lang, [], onlyStation || region ? 20 : 8, region);
+  if (onlyStation) return { results: r.filter((c) => c.kind === 'station').slice(0, 8), elsewhere: [] };
+  return region ? splitByRegion(r, region, lang) : { results: r.slice(0, 8), elsewhere: [] };
 }

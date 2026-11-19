@@ -65,7 +65,7 @@ async function searchApi(
   q: string,
   lang: Lang,
   opts: { region?: string; full?: boolean; onlyStation?: boolean },
-): Promise<{ results: Candidate[]; offline: boolean }> {
+): Promise<{ results: Candidate[]; elsewhere: string[]; offline: boolean }> {
   const p = new URLSearchParams({ q, lang });
   if (opts.region) p.set('region', opts.region);
   if (opts.full) p.set('full', '1');
@@ -73,10 +73,11 @@ async function searchApi(
   try {
     const res = await fetch(`/api/search?${p}`);
     if (!res.ok) throw new Error(String(res.status));
-    return { results: (await res.json()).results ?? [], offline: false };
+    const j = await res.json();
+    return { results: j.results ?? [], elsewhere: j.elsewhere ?? [], offline: false };
   } catch {
     const o = await loadOffline();
-    return { results: o.offlineSearch(q, lang, opts.region, opts.onlyStation), offline: true };
+    return { ...o.offlineSearch(q, lang, opts.region, opts.onlyStation), offline: true };
   }
 }
 type TFn = (k: Parameters<typeof t>[1], v?: Record<string, string | number>) => string;
@@ -163,6 +164,8 @@ export function GuideApp({
   const [origin, setOrigin] = useState<Origin | null>(initialOrigin ?? null);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Candidate[] | null>(null);
+  /** 목적지가 다른 도시에서만 찾아졌을 때 그 도시 이름 */
+  const [elsewhere, setElsewhere] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [dest, setDest] = useState<Candidate | null>(null);
   const [guide, setGuide] = useState<GuideView | null>(null);
@@ -295,7 +298,10 @@ export function GuideApp({
     const timer = setTimeout(async () => {
       try {
         const r = await searchApi(q, lang, { region });
-        if (id === reqId.current) setResults(r.results);
+        if (id === reqId.current) {
+          setResults(r.results);
+          setElsewhere(r.elsewhere);
+        }
       } finally {
         if (id === reqId.current) setLoading(false);
       }
@@ -371,6 +377,7 @@ export function GuideApp({
   const runSearch = async (q: string, byVoice: boolean): Promise<Candidate[]> => {
     const r = await searchApi(q, lang, { region, full: true });
     const list: Candidate[] = r.results;
+    setElsewhere(r.elsewhere);
     if (list.length === 0) send('search_fail', { signId: scanKey, lang, query: q, value: byVoice ? 'voice' : 'text' });
     return list;
   };
@@ -590,6 +597,7 @@ export function GuideApp({
           query={query}
           setQuery={setQuery}
           results={results}
+          elsewhere={elsewhere}
           loading={loading}
           popular={popular[lang].filter((c) => !region || !c.region || c.region === region)}
           recent={recent
@@ -766,7 +774,7 @@ function OriginPanel({
         <Icon name="search" size={20} />
         <input className="search-input" type="search" placeholder={T('originPlaceholder')} aria-label={T('originPlaceholder')} value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" />
       </label>
-      {found && found.length > 0 && <OriginList list={found} lang={lang} T={T} onPick={onPick} />}
+      {found && found.length > 0 && <GroupedOrigins list={found} cities={cities} lang={lang} T={T} onPick={onPick} />}
       {cities.length > 0 && (
         <details open={byLine} onToggle={(e) => setByLine((e.target as HTMLDetailsElement).open)}>
           <summary className="section-label" style={{ cursor: 'pointer' }}>
@@ -782,6 +790,29 @@ function OriginPanel({
         {T('entranceTip')} {T('locationNote')}
       </p>
     </section>
+  );
+}
+
+/** 출발역 검색 결과를 권역(수도권·부산·대구·광주·대전)별 제목으로 나눠 보여 준다. 한 권역뿐이면 제목 없이. */
+function GroupedOrigins({ list, cities, lang, T, onPick }: { list: Origin[]; cities: CityPick[]; lang: Lang; T: TFn; onPick: (o: Origin) => void }) {
+  const order = cities.map((c) => c.id);
+  const groups = new Map<string, Origin[]>();
+  for (const o of list) {
+    const r = o.region ?? '';
+    groups.set(r, [...(groups.get(r) ?? []), o]);
+  }
+  const keys = [...groups.keys()].sort((a, b) => (order.indexOf(a) + 99) % 99 - (order.indexOf(b) + 99) % 99);
+  if (keys.length <= 1) return <OriginList list={list} lang={lang} T={T} onPick={onPick} />;
+  return (
+    <>
+      {keys.map((r) => (
+        <div key={r} className="col" style={{ gap: 6 }}>
+          <p className="section-label">{cities.find((c) => c.id === r)?.name[lang] ?? r}</p>
+          {/* 권역 제목이 있으므로 이름 아래 권역 표시는 뺀다 */}
+          <OriginList list={groups.get(r)!.map((o) => ({ ...o, note: undefined }))} lang={lang} T={T} onPick={onPick} />
+        </div>
+      ))}
+    </>
   );
 }
 
@@ -861,6 +892,7 @@ function Home({
   query,
   setQuery,
   results,
+  elsewhere,
   loading,
   popular,
   recent,
@@ -874,6 +906,7 @@ function Home({
   query: string;
   setQuery: (s: string) => void;
   results: Candidate[] | null;
+  elsewhere: string[];
   loading: boolean;
   popular: Candidate[];
   recent: Candidate[];
@@ -963,7 +996,7 @@ function Home({
 
       {results && results.length === 0 && !loading && (
         <div className="note">
-          <Icon name="info" size={18} /> {T('noResults')}
+          <Icon name="info" size={18} /> {elsewhere.length > 0 ? T('otherRegionHit', { city: elsewhere.join(', ') }) : T('noResults')}
         </div>
       )}
 
