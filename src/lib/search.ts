@@ -6,6 +6,7 @@
 import { RAW_PLACES } from '@/data/places';
 import { REGION_NAMES, type Region } from '@/data/network-data';
 import { getNetwork, getStation, stationByKo, stationIdFromKey, stationName } from './network';
+import { foldVoicing, hangulToJaRomaji, hasKana, kanaToRomaji } from './kana';
 import type { AliasEntry, Lang, Place } from './types';
 
 export interface Candidate {
@@ -24,13 +25,24 @@ export interface Candidate {
   score: number;
 }
 
+/**
+ * 검색용 표기 맞추기: 대소문자·악센트(é → e)·띄어쓰기·문장부호를 없애고,
+ * 언어마다 역명 앞뒤에 붙이는 말("gare d'", "estación", "station", "駅", "站", "역")을 뗀다.
+ */
+const PREFIX = /^(gare\s+(de\s+la|de|du|des|d['’])|station\s+(de|du|d['’])|station|estaci[oó]n\s+(de\s+la|del|de)|estaci[oó]n|metro|m[ée]tro)\s*/;
+const SUFFIX = /\s*(station|stn|estaci[oó]n|gare|metro|m[ée]tro|駅|站|역)$/;
+
 export function normalize(s: string): string {
   return s
     .normalize('NFKC')
     .toLowerCase()
-    .replace(/(station|stn|estación de|estacion de|gare de|駅|站|역)$/g, '')
-    .replace(/^(estación de|estacion de|gare de|station)\s*/g, '')
-    .replace(/[\s\-–_.,'’·・()（）]/g, '')
+    .trim()
+    .replace(PREFIX, '')
+    .replace(SUFFIX, '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // 악센트만 떼고 (한글·가나는 아래에서 다시 합침)
+    .normalize('NFC')
+    .replace(/[\s\-–_.,'’·・()（）!?！？]/g, '')
     .replace(/university/g, 'univ')
     .trim();
 }
@@ -71,6 +83,28 @@ function buildBase(): Entry[] {
   return out;
 }
 
+/** 모든 역의 일본식 발음 (가타카나·히라가나로 친 역명 찾기용) */
+let kanaIndex: Entry[] | null = null;
+function buildKana(): Entry[] {
+  if (kanaIndex) return kanaIndex;
+  kanaIndex = [...getNetwork().stations.values()].map((st) => ({ key: foldVoicing(hangulToJaRomaji(st.nameKo)), kind: 'station' as const, id: st.id }));
+  return kanaIndex;
+}
+
+/** 한글을 자모로 풀어 쓴다 (앙국 ↔ 안국처럼 받침 하나 틀린 오타를 잡기 위해) */
+const CHO = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ';
+const JUNG = 'ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ';
+const JONG = ['', ...'ㄱㄲㄳㄴㄵㄶㄷㄹㄺㄻㄼㄽㄾㄿㅀㅁㅂㅄㅅㅆㅇㅈㅊㅋㅌㅍㅎ'];
+function jamo(s: string): string {
+  let out = '';
+  for (const ch of s) {
+    const c = ch.charCodeAt(0) - 0xac00;
+    if (c < 0 || c > 11171) out += ch;
+    else out += CHO[Math.floor(c / 588)] + JUNG[Math.floor((c % 588) / 28)] + JONG[c % 28];
+  }
+  return out;
+}
+
 function levenshtein(a: string, b: string, max: number): number {
   if (Math.abs(a.length - b.length) > max) return max + 1;
   let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
@@ -100,6 +134,10 @@ function score(q: string, key: string): number {
     const dp = levenshtein(q, key.slice(0, q.length), max);
     if (dp <= max) return 30 - dp * 5;
   }
+  // 한글 오타 허용: 자모 하나 차이 (앙국 → 안국, 강남 → 갱남). 두 글자 이상일 때만.
+  if (/^[가-힣]{2,}$/.test(q) && /^[가-힣]/.test(key) && Math.abs(q.length - key.length) <= 1) {
+    if (levenshtein(jamo(q), jamo(key), 1) <= 1) return 38;
+  }
   return 0;
 }
 
@@ -119,12 +157,17 @@ export function search(query: string, lang: Lang, extra: AliasEntry[] = [], limi
   if (!q) return [];
   const index = buildBase().concat(extra.map((a) => ({ key: normalize(a.text), kind: 'station' as const, id: a.stationId })));
   const best = new Map<string, { kind: 'station' | 'place'; id: string; score: number }>();
-  for (const e of index) {
-    const sc = score(q, e.key);
-    if (sc <= 0) continue;
+  const add = (e: Entry, sc: number) => {
+    if (sc <= 0) return;
     const k = `${e.kind}:${e.id}`;
     const cur = best.get(k);
     if (!cur || sc > cur.score) best.set(k, { kind: e.kind, id: e.id, score: sc });
+  };
+  for (const e of index) add(e, score(q, e.key));
+  // 가타카나·히라가나로 친 경우: 모든 역의 일본식 발음과 비교 (アングク → 안국)
+  if (hasKana(query)) {
+    const qk = foldVoicing(kanaToRomaji(query));
+    if (qk.length >= 2) for (const e of buildKana()) add(e, Math.min(95, score(qk, e.key)));
   }
   const out: Candidate[] = [];
   for (const b of best.values()) {

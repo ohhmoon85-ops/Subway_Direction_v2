@@ -915,6 +915,8 @@ function Home({
         }}
       >
         <h1 id="whereTo">{T('whereTo')}</h1>
+        {/* 말하기·입력 둘 다 된다는 것을 알린다 (어느 언어로 쳐도 됨) */}
+        {canVoice && !listening && <p className="muted small" style={{ margin: '-4px 4px 0' }}>{T('inputHint')}</p>}
         <div className="row" style={{ gap: 8 }}>
           <label className="search-field grow">
             <Icon name="search" size={20} />
