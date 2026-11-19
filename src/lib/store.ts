@@ -188,7 +188,8 @@ export function getStore(): Store {
   if (store) return store;
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (url && key) store = new SupabaseStore(url.replace(/\/$/, ''), key);
+  // Project URL 대신 API URL(…/rest/v1/)을 넣어도 동작하게 끝부분을 뗀다
+  if (url && key) store = new SupabaseStore(url.trim().replace(/\/+$/, '').replace(/\/rest\/v1$/, ''), key.trim());
   else if (process.env.VERCEL) store = new LocalStore('memory');
   else store = new LocalStore('file', path.join(process.cwd(), '.data', 'db.json'));
   return store;
