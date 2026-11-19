@@ -47,6 +47,11 @@ class SupabaseStore implements Store {
   kind = 'supabase' as const;
   constructor(private url: string, private key: string) {}
 
+  /** 네 테이블을 하나씩 읽어 본다 (관리 화면의 저장소 상태 표시용) */
+  async check(): Promise<void> {
+    for (const t of ['signs', 'sign_history', 'events', 'aliases']) await this.req(`${t}?select=*&limit=1`);
+  }
+
   private async req(pathq: string, init: RequestInit = {}) {
     const res = await fetch(`${this.url}/rest/v1/${pathq}`, {
       ...init,
@@ -187,6 +192,30 @@ export function getStore(): Store {
   else if (process.env.VERCEL) store = new LocalStore('memory');
   else store = new LocalStore('file', path.join(process.cwd(), '.data', 'db.json'));
   return store;
+}
+
+export interface StoreStatus {
+  kind: Store['kind'];
+  ok: boolean;
+  /** 사람이 읽을 원인과 조치 */
+  problem?: string;
+}
+
+/** 저장소가 실제로 쓸 수 있는 상태인지 (관리 화면 맨 위에 표시) */
+export async function storeStatus(): Promise<StoreStatus> {
+  const s = getStore();
+  if (!(s instanceof SupabaseStore)) return { kind: s.kind, ok: s.kind === 'file' };
+  try {
+    await s.check();
+    return { kind: 'supabase', ok: true };
+  } catch (e) {
+    const msg = String((e as Error).message ?? e);
+    let problem = `연결 오류: ${msg.slice(0, 200)}`;
+    if (/supabase 40[13]/.test(msg)) problem = 'Supabase 키가 맞지 않습니다. Vercel의 SUPABASE_SERVICE_ROLE_KEY 에 Secret key(sb_secret_…)를 넣었는지 확인하세요.';
+    else if (/PGRST205|42P01|does not exist|Could not find the table/.test(msg)) problem = '테이블이 없습니다. Supabase SQL Editor 에서 supabase/schema.sql 을 실행하세요.';
+    else if (/fetch failed|ENOTFOUND|getaddrinfo/.test(msg)) problem = 'Supabase 주소에 접속할 수 없습니다. Vercel의 SUPABASE_URL(https://프로젝트ID.supabase.co)을 확인하세요.';
+    return { kind: 'supabase', ok: false, problem };
+  }
 }
 
 /** 역명 사전 추가분은 1분 캐시 */

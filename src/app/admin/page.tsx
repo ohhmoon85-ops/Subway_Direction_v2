@@ -1,13 +1,18 @@
 import Link from 'next/link';
 import { requirePageUser } from '@/lib/admin-api';
 import { getLine, getStation } from '@/lib/network';
-import { getStore } from '@/lib/store';
+import { getStore, storeStatus } from '@/lib/store';
+import { SEED_SIGNS } from '@/data/seed-signs';
 import { STATUS_KO } from '@/lib/admin-labels';
 
 
 export default async function AdminHome() {
   const user = await requirePageUser();
-  const signs = await getStore().listSigns();
+  const status = await storeStatus();
+  // 저장소 오류여도 화면은 열리게 (시연 표지만 보여 주고 위에 원인 표시)
+  const signs = await getStore()
+    .listSigns()
+    .catch(() => SEED_SIGNS);
   const byStation = new Map<string, typeof signs>();
   for (const s of signs) {
     if (!byStation.has(s.stationId)) byStation.set(s.stationId, []);
@@ -18,6 +23,22 @@ export default async function AdminHome() {
 
   return (
     <div className="col">
+      {/* 저장소 상태: 표지 등록 정보가 계속 남는지 */}
+      {status.kind === 'supabase' && status.ok ? (
+        <p className="small muted">저장소: Supabase 연결됨 — 등록한 표지·이력·통계가 계속 저장됩니다.</p>
+      ) : status.kind === 'supabase' ? (
+        <div className="card notice">
+          <strong>저장소: Supabase 연결 오류</strong>
+          <p className="small">{status.problem}</p>
+        </div>
+      ) : status.kind === 'memory' ? (
+        <div className="card notice">
+          <strong>저장소: 임시(메모리)</strong>
+          <p className="small">재배포하거나 서버가 다시 켜지면 등록한 표지가 사라집니다. Supabase를 연결하세요 (README 3장).</p>
+        </div>
+      ) : (
+        <p className="small muted">저장소: 이 컴퓨터의 파일(.data/db.json) — 로컬 개발용</p>
+      )}
       {user.role !== 'viewer' && pending.length > 0 && (
         <div className="card notice">
           <strong>승인 대기 {pending.length}장</strong>

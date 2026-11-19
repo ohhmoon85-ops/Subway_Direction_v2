@@ -47,3 +47,9 @@ alter table signs enable row level security;
 alter table sign_history enable row level security;
 alter table events enable row level security;
 alter table aliases enable row level security;
+
+-- 서버(service_role / Secret key)가 표를 읽고 쓸 수 있게 권한을 준다.
+-- (새 프로젝트에서 "새 표 자동 공개"가 꺼져 있어도 동작하도록. 이미 권한이 있으면 그대로)
+grant usage on schema public to service_role;
+grant all on table signs, sign_history, events, aliases to service_role;
+grant usage, select on all sequences in schema public to service_role;
