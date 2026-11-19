@@ -283,6 +283,8 @@ svg { flex: none; }
 /* S4 탑승 중 */
 .ride-hero { text-align: center; padding: 26px 18px 22px; }
 .ride-big { font-size: 5.2em; font-weight: 800; line-height: 1; letter-spacing: -0.05em; }
+/* 환승 경로: 갈아탈 노선 · 최종 도착까지 남은 역 */
+.ride-sub { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-weight: 600; font-size: 0.95em; }
 .ride-hero.urgent { background: var(--warn-bg); color: var(--warn); }
 .alert-flash { animation: flash 0.5s steps(2, start) 10; }
 @keyframes flash { to { background: var(--warn); color: #fff; } }

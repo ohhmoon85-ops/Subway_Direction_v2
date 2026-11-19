@@ -1074,6 +1074,7 @@ export function GuideCard({ g, lang, T, locationMode }: { g: GuideView; lang: La
       <p className="final-dest">
         <Icon name="flag" size={18} /> {T('finalDestBig', { station: withStation(lang, g.dest.name) })}
         {lang !== 'ko' && <span className="ko-inline"> · {g.dest.ko}</span>}
+        <span className="ko-inline"> · {T('totalStops', { n: g.totalStops })}</span>
       </p>
     </>
   ) : (

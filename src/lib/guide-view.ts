@@ -1,4 +1,5 @@
 /** 계산 결과(RouteResult)를 화면용 데이터로 바꾼다. 문장은 화면(클라이언트)에서 만든다. */
+import { STATION_COORDS } from '@/data/station-coords';
 import { getLine, getStation, stationName } from './network';
 import { badgeText } from './i18n';
 import { guide } from './route';
@@ -8,6 +9,8 @@ export interface StationView {
   id: string;
   name: string;
   ko: string;
+  /** [위도, 경도] — 탑승 중 위치를 경로 위의 역에 맞출 때 (휴대폰에서만 씀) */
+  c?: [number, number];
 }
 
 export interface LegView {
@@ -43,7 +46,8 @@ export interface GuideView {
 
 export function sv(id: string, lang: Lang): StationView {
   const st = getStation(id)!;
-  return { id, name: stationName(st, lang), ko: st.ko };
+  const c = STATION_COORDS[id];
+  return { id, name: stationName(st, lang), ko: st.ko, ...(c ? { c } : {}) };
 }
 
 export function buildGuide(
